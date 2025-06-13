@@ -148,3 +148,19 @@ else:
     if st.button("Logout"):
         st.session_state.email = None
         st.experimental_rerun()
+
+# ----------------------------
+# 📜 Privacy Policy & Footer
+# ----------------------------
+
+with st.expander("Privacy Policy"):
+    st.markdown("""
+    - We respect your privacy.
+    - Your data is securely stored in our cloud database.
+    - We do not sell or misuse your information.
+    - For any queries, contact: **your@email.com**
+    """)
+
+st.markdown("---")
+st.markdown("© 2025 Vihaan Book Publishing Platform | All Rights Reserved", unsafe_allow_html=True)
+
