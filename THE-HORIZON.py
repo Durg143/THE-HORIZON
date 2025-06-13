@@ -2,9 +2,11 @@ import streamlit as st
 from pymongo import MongoClient
 import bcrypt
 from datetime import datetime
+import streamlit as st
+st.write("Secrets loaded:", st.secrets)
 
 # ---------------------- 🔐 MongoDB Connection ----------------------
-MONGO_URL = st.secrets["mongo"]["url"]  # Securely loaded from .streamlit/secrets.toml
+MONGO_URL = st.secrets["mongo"]["url"] 
 client = MongoClient(MONGO_URL)
 db = client["book_platform"]
 users_col = db["users"]
