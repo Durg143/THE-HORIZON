@@ -1,10 +1,10 @@
 import streamlit as st
 from pymongo import MongoClient
 import bcrypt
-import datetime
+from datetime import datetime
 
-# ----------------------  MongoDB Configuration ----------------------
-MONGO_URL = mongodb+srv://pp26012006:<db_password>@the-horizon.xp1c3zz.mongodb.net/?retryWrites=true&w=majority&appName=THE-HORIZON  # 🔧 Your Mongo URI
+# ---------------------- 🔐 MongoDB Connection ----------------------
+MONGO_URL = st.secrets["mongo"]["url"]  # Securely loaded from .streamlit/secrets.toml
 client = MongoClient(MONGO_URL)
 db = client["book_platform"]
 users_col = db["users"]
@@ -12,134 +12,139 @@ chapters_col = db["chapters"]
 reviews_col = db["reviews"]
 likes_col = db["likes"]
 
-st.set_page_config(page_title="Book Publisher", layout="wide")
+# ---------------------- 🔑 Authentication ----------------------
+def hash_password(password):
+    return bcrypt.hashpw(password.encode(), bcrypt.gensalt())
 
-# ---------------------- AUTH ----------------------
-def create_user(email, password):
-    hashed_pw = bcrypt.hashpw(password.encode(), bcrypt.gensalt())
-    users_col.insert_one({"email": email, "password": hashed_pw})
+def check_password(password, hashed):
+    return bcrypt.checkpw(password.encode(), hashed)
 
-def authenticate_user(email, password):
-    user = users_col.find_one({"email": email})
-    if user and bcrypt.checkpw(password.encode(), user["password"]):
-        return user
-    return None
+# ---------------------- 📌 Session State ----------------------
+if "email" not in st.session_state:
+    st.session_state.email = None
 
-# ---------------------- SESSION ----------------------
-if 'logged_in' not in st.session_state:
-    st.session_state.logged_in = False
-    st.session_state.user_email = None
+# ---------------------- 🔐 Login / Sign Up ----------------------
+st.title("📚 Book Publishing Platform")
 
-if not st.session_state.logged_in:
-    st.title("📚 Login to Book Platform")
+if not st.session_state.email:
+    auth_tab = st.tabs(["🔑 Login", "📝 Sign Up"])
 
-    email = st.text_input("Email")
-    password = st.text_input("Password", type="password")
+    with auth_tab[0]:
+        email = st.text_input("Email", key="login_email")
+        password = st.text_input("Password", type="password", key="login_pass")
+        if st.button("Login"):
+            user = users_col.find_one({"email": email})
+            if user and check_password(password, user["password"]):
+                st.session_state.email = email
+                st.success("Welcome back!")
+                st.experimental_rerun()
+            else:
+                st.error("Invalid credentials")
 
-    if st.button("Login"):
-        user = authenticate_user(email, password)
-        if user:
-            st.session_state.logged_in = True
-            st.session_state.user_email = user["email"]
-            st.success("✅ Logged in successfully!")
-            st.experimental_rerun()
-        else:
-            st.error("❌ Invalid credentials")
+    with auth_tab[1]:
+        email = st.text_input("Email", key="signup_email")
+        password = st.text_input("Password", type="password", key="signup_pass")
+        if st.button("Sign Up"):
+            if users_col.find_one({"email": email}):
+                st.warning("Email already registered.")
+            else:
+                hashed = hash_password(password)
+                users_col.insert_one({"email": email, "password": hashed})
+                st.success("User registered. Please log in.")
 
-    if st.button("Sign Up"):
-        if users_col.find_one({"email": email}):
-            st.warning("User already exists!")
-        else:
-            create_user(email, password)
-            st.success("✅ Account created! You can now log in.")
+else:
+    st.success(f"🎉 Logged in as: {st.session_state.email}")
+    email = st.session_state.email
+    is_admin = email == "pp26012006@example.com"  
 
-# ---------------------- MAIN APP ----------------------
-if st.session_state.logged_in:
-    email = st.session_state.user_email
-    is_admin = email == "admin@example.com"  # 🔧 CHANGE TO YOUR ADMIN EMAIL
-
-    st.sidebar.title(f"👋 Welcome, {email.split('@')[0]}")
-    if st.sidebar.button("Logout"):
-        st.session_state.logged_in = False
-        st.experimental_rerun()
-
-    st.title("📖 My Book Platform")
-
-    # ---------------------- ADMIN: Upload New Chapter ----------------------
+    # ---------------------- ✍️ Upload Chapter (Admin) ----------------------
     if is_admin:
-        st.markdown("## ✍️ Upload New Chapter (Admin Only)")
+        st.markdown("## ✍️ Upload New Chapter")
         with st.form("upload_form"):
-            chapter_id = st.text_input("Chapter ID (e.g., chapter1)")
+            chapter_id = st.text_input("Chapter ID")
             chapter_title = st.text_input("Chapter Title")
             chapter_content = st.text_area("Chapter Content")
             submitted = st.form_submit_button("Upload Chapter")
             if submitted:
-                if chapter_id and chapter_title and chapter_content:
-                    chapters_col.update_one(
-                        {"chapter_id": chapter_id},
-                        {"$set": {
-                            "chapter_id": chapter_id,
-                            "title": chapter_title,
-                            "content": chapter_content,
-                            "uploaded_by": email,
-                            "timestamp": datetime.datetime.now()
-                        }},
-                        upsert=True
-                    )
-                    st.success("✅ Chapter uploaded!")
+                if chapters_col.find_one({"chapter_id": chapter_id}):
+                    st.error("Chapter ID already exists.")
                 else:
-                    st.error("❌ All fields are required.")
+                    chapters_col.insert_one({
+                        "chapter_id": chapter_id,
+                        "title": chapter_title,
+                        "content": chapter_content,
+                        "uploaded_by": email,
+                        "timestamp": datetime.utcnow()
+                    })
+                    st.success("✅ Chapter uploaded!")
 
-    # ---------------------- Reader View ----------------------
-    st.markdown("## 📚 Read and Review Chapters")
-    chapter_list = list(chapters_col.find())
-    chapter_titles = [f"{c['chapter_id']} - {c['title']}" for c in chapter_list]
+    # ---------------------- 📋 Manage Chapters (Admin) ----------------------
+    if is_admin:
+        st.markdown("## 📋 Manage Uploaded Chapters")
+        all_chapters = list(chapters_col.find())
 
-    if chapter_list:
+        for ch in all_chapters:
+            with st.expander(f"{ch['chapter_id']} — {ch['title']}"):
+                new_title = st.text_input("Edit Title", value=ch['title'], key=f"title_{ch['chapter_id']}")
+                new_content = st.text_area("Edit Content", value=ch['content'], key=f"content_{ch['chapter_id']}")
+                if st.button("✏️ Save Changes", key=f"save_{ch['chapter_id']}"):
+                    chapters_col.update_one({"chapter_id": ch['chapter_id']}, {"$set": {"title": new_title, "content": new_content}})
+                    st.success("✅ Chapter updated.")
+                    st.experimental_rerun()
+
+                if st.button("🗑️ Delete Chapter", key=f"delete_{ch['chapter_id']}"):
+                    chapters_col.delete_one({"chapter_id": ch['chapter_id']})
+                    reviews_col.delete_many({"chapter_id": ch['chapter_id']})
+                    likes_col.delete_many({"chapter_id": ch['chapter_id']})
+                    st.warning("🗑️ Chapter deleted.")
+                    st.experimental_rerun()
+
+    # ---------------------- 📖 Read & Review Chapters (All Users) ----------------------
+    st.markdown("## 📖 Read and Review Chapters")
+    chapter_titles = [f"{c['chapter_id']} — {c['title']}" for c in chapters_col.find()]
+    chapter_map = {f"{c['chapter_id']} — {c['title']}": c for c in chapters_col.find()}
+
+    if chapter_titles:
         selected = st.selectbox("Select a Chapter", chapter_titles)
-        selected_chapter = chapter_list[chapter_titles.index(selected)]
+        selected_ch = chapter_map[selected]
 
-        st.subheader(selected_chapter["title"])
-        st.write(selected_chapter["content"])
+        st.subheader(selected_ch['title'])
+        st.write(selected_ch['content'])
 
-        # ---------------------- Likes ----------------------
-        like_entry = likes_col.find_one({"chapter_id": selected_chapter["chapter_id"]})
-        liked_by = like_entry["liked_by"] if like_entry else []
-        likes_count = len(liked_by)
-        has_liked = email in liked_by
+        # Like button
+        like_doc = likes_col.find_one({"chapter_id": selected_ch['chapter_id']}) or {"liked_by": []}
+        has_liked = email in like_doc["liked_by"]
+        if not has_liked and st.button("❤️ Like"):
+            likes_col.update_one(
+                {"chapter_id": selected_ch['chapter_id']},
+                {"$addToSet": {"liked_by": email}},
+                upsert=True
+            )
+            st.success("❤️ Liked!")
 
-        if not has_liked:
-            if st.button("👍 Like"):
-                likes_col.update_one(
-                    {"chapter_id": selected_chapter["chapter_id"]},
-                    {"$addToSet": {"liked_by": email}},
-                    upsert=True
-                )
-                st.experimental_rerun()
+        st.markdown(f"**Total Likes:** {len(like_doc['liked_by']) if like_doc else 0}")
 
-        st.write(f"👍 {likes_count} Likes")
-
-        # ---------------------- Reviews ----------------------
-        st.markdown("### 💬 Leave a Review")
+        # Reviews
+        st.subheader("💬 Leave a Review")
         review_text = st.text_area("Your Review")
         if st.button("Submit Review"):
             reviews_col.insert_one({
-                "chapter_id": selected_chapter["chapter_id"],
+                "chapter_id": selected_ch['chapter_id'],
                 "email": email,
                 "text": review_text,
-                "timestamp": datetime.datetime.now()
+                "timestamp": datetime.utcnow()
             })
             st.success("✅ Review submitted!")
 
-        st.markdown("### 📝 Reader Reviews")
-        all_reviews = list(reviews_col.find({"chapter_id": selected_chapter["chapter_id"]}))
+        st.subheader("📝 Reader Reviews")
+        all_reviews = reviews_col.find({"chapter_id": selected_ch['chapter_id']}).sort("timestamp", -1)
         for r in all_reviews:
-            st.info(f"**{r['email']}** at *{r['timestamp'].strftime('%Y-%m-%d %H:%M')}*:\n\n{r['text']}")
-    else:
-        st.info("No chapters published yet.")
+            st.markdown(f"**{r['email']}**: {r['text']}")
 
-# Optional Libraries to Add:
-# - streamlit_authenticator
-# - firebase_admin
-# - pymongo / supabase-py
-# - streamlit_extras for better UX
+    else:
+        st.info("No chapters uploaded yet.")
+
+    # ---------------------- 🔚 Logout ----------------------
+    if st.button("Logout"):
+        st.session_state.email = None
+        st.experimental_rerun()
