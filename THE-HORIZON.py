@@ -162,5 +162,26 @@ with st.expander("Privacy Policy"):
     """)
 
 st.markdown("---")
-st.markdown("© 2025 Vihaan Book Publishing Platform | All Rights Reserved", unsafe_allow_html=True)
+st.markdown("durg143 Book Publishing Platform | All Rights Reserved", unsafe_allow_html=True)
+
+# ----------------------------
+# 📜 About the Author | Contact | Privacy
+# ----------------------------
+
+with st.expander("📘 About the Author"):
+    st.markdown("""
+    Myself Durga Prasad Potnuru, a passionate storyteller and author.
+    
+    I believe in the power of words to heal, inspire, and ignite the imagination.  
+    My books often explore emotional resilience, connection, and the horizon between dreams and reality.
+
+    You can follow my journey on [Instagram](https://www.instagram.com/mr_bluff_143/) or [Twitter](https://x.com/durgaprasad069).
+    or [Linkedin](https://www.linkedin.com/in/durga-prasad-potnuru-a60779293/)
+    """)
+
+with st.expander("📬 Contact Us"):
+    st.markdown("""
+    - 📧 **Email**: pp26012006@gmail.com  
+    - 📱 **Instagram**: [@mr_bluff_143](https://www.instagram.com/mr_bluff_143/)
+    """)
 
