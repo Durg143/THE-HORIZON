@@ -1,96 +1,142 @@
-# 📚 Streamlit Book Publishing App with Login, Reviews, and Likes
-
 import streamlit as st
-from streamlit_extras.switch_page_button import switch_page
-from streamlit_authenticator import Authenticate
-import pandas as pd
+from pymongo import MongoClient
+import bcrypt
 import datetime
 
-# -------------- CONFIGURATION (replace with secure methods in production) --------------
+# ----------------------  MongoDB Configuration ----------------------
+MONGO_URL = mongodb+srv://pp26012006:<db_password>@the-horizon.xp1c3zz.mongodb.net/?retryWrites=true&w=majority&appName=THE-HORIZON  # 🔧 Your Mongo URI
+client = MongoClient(MONGO_URL)
+db = client["book_platform"]
+users_col = db["users"]
+chapters_col = db["chapters"]
+reviews_col = db["reviews"]
+likes_col = db["likes"]
 
-st.set_page_config(page_title="My Book App", layout="wide")
-st.markdown("""
-    <style>
-        .main { background-color: #0e1117; color: white; }
-        .stButton>button { color: white; background-color: #5c5cfa; }
-    </style>
-""", unsafe_allow_html=True)
+st.set_page_config(page_title="Book Publisher", layout="wide")
 
-# Fake database (in production, use Firebase, Supabase, or MongoDB)
-if 'reviews' not in st.session_state:
-    st.session_state.reviews = []
-if 'likes' not in st.session_state:
-    st.session_state.likes = {}
+# ---------------------- AUTH ----------------------
+def create_user(email, password):
+    hashed_pw = bcrypt.hashpw(password.encode(), bcrypt.gensalt())
+    users_col.insert_one({"email": email, "password": hashed_pw})
 
-# -------------- LOGIN PAGE --------------
+def authenticate_user(email, password):
+    user = users_col.find_one({"email": email})
+    if user and bcrypt.checkpw(password.encode(), user["password"]):
+        return user
+    return None
 
-st.sidebar.title("Welcome to BookWorld")
-st.sidebar.markdown("Login to continue")
+# ---------------------- SESSION ----------------------
+if 'logged_in' not in st.session_state:
+    st.session_state.logged_in = False
+    st.session_state.user_email = None
 
-login_method = st.sidebar.radio("Login Method", ["Continue with Google", "Continue with X (Twitter)"])
+if not st.session_state.logged_in:
+    st.title("📚 Login to Book Platform")
 
-username = st.sidebar.text_input("Username")
-password = st.sidebar.text_input("Password", type="password")
-login_button = st.sidebar.button("Login")
+    email = st.text_input("Email")
+    password = st.text_input("Password", type="password")
 
-if login_button:
-    if username and password:
-        st.session_state.logged_in = True
-        st.session_state.user = username
+    if st.button("Login"):
+        user = authenticate_user(email, password)
+        if user:
+            st.session_state.logged_in = True
+            st.session_state.user_email = user["email"]
+            st.success("✅ Logged in successfully!")
+            st.experimental_rerun()
+        else:
+            st.error("❌ Invalid credentials")
+
+    if st.button("Sign Up"):
+        if users_col.find_one({"email": email}):
+            st.warning("User already exists!")
+        else:
+            create_user(email, password)
+            st.success("✅ Account created! You can now log in.")
+
+# ---------------------- MAIN APP ----------------------
+if st.session_state.logged_in:
+    email = st.session_state.user_email
+    is_admin = email == "admin@example.com"  # 🔧 CHANGE TO YOUR ADMIN EMAIL
+
+    st.sidebar.title(f"👋 Welcome, {email.split('@')[0]}")
+    if st.sidebar.button("Logout"):
+        st.session_state.logged_in = False
         st.experimental_rerun()
+
+    st.title("📖 My Book Platform")
+
+    # ---------------------- ADMIN: Upload New Chapter ----------------------
+    if is_admin:
+        st.markdown("## ✍️ Upload New Chapter (Admin Only)")
+        with st.form("upload_form"):
+            chapter_id = st.text_input("Chapter ID (e.g., chapter1)")
+            chapter_title = st.text_input("Chapter Title")
+            chapter_content = st.text_area("Chapter Content")
+            submitted = st.form_submit_button("Upload Chapter")
+            if submitted:
+                if chapter_id and chapter_title and chapter_content:
+                    chapters_col.update_one(
+                        {"chapter_id": chapter_id},
+                        {"$set": {
+                            "chapter_id": chapter_id,
+                            "title": chapter_title,
+                            "content": chapter_content,
+                            "uploaded_by": email,
+                            "timestamp": datetime.datetime.now()
+                        }},
+                        upsert=True
+                    )
+                    st.success("✅ Chapter uploaded!")
+                else:
+                    st.error("❌ All fields are required.")
+
+    # ---------------------- Reader View ----------------------
+    st.markdown("## 📚 Read and Review Chapters")
+    chapter_list = list(chapters_col.find())
+    chapter_titles = [f"{c['chapter_id']} - {c['title']}" for c in chapter_list]
+
+    if chapter_list:
+        selected = st.selectbox("Select a Chapter", chapter_titles)
+        selected_chapter = chapter_list[chapter_titles.index(selected)]
+
+        st.subheader(selected_chapter["title"])
+        st.write(selected_chapter["content"])
+
+        # ---------------------- Likes ----------------------
+        like_entry = likes_col.find_one({"chapter_id": selected_chapter["chapter_id"]})
+        liked_by = like_entry["liked_by"] if like_entry else []
+        likes_count = len(liked_by)
+        has_liked = email in liked_by
+
+        if not has_liked:
+            if st.button("👍 Like"):
+                likes_col.update_one(
+                    {"chapter_id": selected_chapter["chapter_id"]},
+                    {"$addToSet": {"liked_by": email}},
+                    upsert=True
+                )
+                st.experimental_rerun()
+
+        st.write(f"👍 {likes_count} Likes")
+
+        # ---------------------- Reviews ----------------------
+        st.markdown("### 💬 Leave a Review")
+        review_text = st.text_area("Your Review")
+        if st.button("Submit Review"):
+            reviews_col.insert_one({
+                "chapter_id": selected_chapter["chapter_id"],
+                "email": email,
+                "text": review_text,
+                "timestamp": datetime.datetime.now()
+            })
+            st.success("✅ Review submitted!")
+
+        st.markdown("### 📝 Reader Reviews")
+        all_reviews = list(reviews_col.find({"chapter_id": selected_chapter["chapter_id"]}))
+        for r in all_reviews:
+            st.info(f"**{r['email']}** at *{r['timestamp'].strftime('%Y-%m-%d %H:%M')}*:\n\n{r['text']}")
     else:
-        st.sidebar.error("Please enter login details")
-
-# -------------- MAIN APP INTERFACE --------------
-if 'logged_in' in st.session_state and st.session_state.logged_in:
-    st.title(f"📘 Welcome, {st.session_state.user}")
-    st.header("My Book: The Adventure Begins")
-
-    st.markdown("### Chapters")
-    chapters = {
-        "Chapter 1: The Call to Adventure": "Once upon a time...",
-        "Chapter 2: Into the Unknown": "The hero steps out...",
-        "Chapter 3: Triumph & Trials": "Challenges arise..."
-    }
-
-    for chapter, content in chapters.items():
-        with st.expander(chapter):
-            st.markdown(content)
-            
-            # Like Button
-            like_key = f"like_{chapter}"
-            if like_key not in st.session_state.likes:
-                st.session_state.likes[like_key] = 0
-            
-            if st.button("👍 Like", key=like_key):
-                st.session_state.likes[like_key] += 1
-            st.write(f"{st.session_state.likes[like_key]} likes")
-
-            # Review Input
-            with st.form(key=f"review_form_{chapter}"):
-                review = st.text_area("Leave a review")
-                submit_review = st.form_submit_button("Submit")
-                if submit_review and review:
-                    st.session_state.reviews.append({
-                        "chapter": chapter,
-                        "user": st.session_state.user,
-                        "review": review,
-                        "timestamp": datetime.datetime.now()
-                    })
-
-            # Display Reviews
-            for r in st.session_state.reviews:
-                if r['chapter'] == chapter:
-                    st.markdown(f"**{r['user']}** ({r['timestamp'].strftime('%Y-%m-%d %H:%M')}): {r['review']}")
-
-# -------------- HOW TO MAKE IT OFFICIAL --------------
-
-# To turn this into an official app:
-# 1. Replace fake login with Firebase Auth or Auth0 integration.
-# 2. Store likes/reviews using a real database: Firebase, Supabase, MongoDB Atlas.
-# 3. Host the app on Streamlit Community Cloud or deploy via Docker on services like Heroku or Render.
-# 4. Buy a domain and link it via reverse proxy if needed.
-# 5. Add Terms of Service, Privacy Policy, and secure login flow for user data protection.
+        st.info("No chapters published yet.")
 
 # Optional Libraries to Add:
 # - streamlit_authenticator
