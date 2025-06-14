@@ -39,7 +39,7 @@ if not st.session_state.email:
             if user and check_password(password, user["password"]):
                 st.session_state.email = email
                 st.success("Welcome back!")
-                st.experimental_rerun()
+                st.rerun()
             else:
                 st.error("Invalid credentials")
 
