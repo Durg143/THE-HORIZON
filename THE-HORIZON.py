@@ -150,7 +150,7 @@ else:
 
     if st.button("Logout"):
         st.session_state.email = None
-        st.experimental_rerun()
+        st.rerun()
 
 # ---------------------- 📌 Footer ----------------------
 with st.expander("Privacy Policy"):
