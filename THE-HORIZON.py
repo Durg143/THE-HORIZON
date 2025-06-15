@@ -125,7 +125,7 @@ else:
                 if st.button("✏️ Save Changes", key=f"save_{ch['chapter_id']}"):
                     chapters_col.update_one({"chapter_id": ch['chapter_id']}, {"$set": {"title": new_title, "content": new_content}})
                     st.success("✅ Chapter updated.")
-                    st.experimental_rerun()
+                    st.rerun()
 
                 if st.button("🗑️ Delete Chapter", key=f"delete_{ch['chapter_id']}"):
                     chapters_col.delete_one({"chapter_id": ch['chapter_id']})
