@@ -18,9 +18,7 @@ def set_bg_image(image_path):
         background-size: contain;
         background-repeat: no-repeat;
         background-position: center;
-        background-attachment: fixed;
-        transition: background 0.5s ease-in-out;
-    }}
+       }}
      .block-container {{
         background-color: rgba(0, 0, 0, 0.6);
         padding: 2rem;
