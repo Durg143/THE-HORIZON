@@ -178,7 +178,10 @@ else:
         st.markdown("## 👥 All Registered Users")
         users = users_col.find()
         for u in users:
-            st.markdown(f"**{u['name']}** | 📧 {u['email']} | 📱 {u['mobile']} | ⏱️ Last Login: {u.get('last_login', '-')}")
+            st.markdown(
+    f"**{u.get('name', 'N/A')}** | 📧 {u.get('email', 'N/A')} | 📱 {u.get('mobile', 'N/A')} | ⏱️ Last Login: {u.get('last_login', 'N/A')}"
+)
+
 
     if st.button("Logout"):
         st.session_state.email = None
