@@ -21,8 +21,19 @@ def set_bg_image(image_path):
         background-attachment: fixed;
         transition: background 0.5s ease-in-out;
     }}
+     .block-container {{
+        background-color: rgba(0, 0, 0, 0.6);
+        padding: 2rem;
+        border-radius: 10px;
+        animation: fadein 2s ease-in;
+    }}
+    @keyframes fadein {{
+        from {{ opacity: 0; transform: translateY(20px); }}
+        to {{ opacity: 1; transform: translateY(0); }}
+    }}
     </style>
     """
+    st.markdown(css, unsafe_allow_html=True)
     st.markdown(page_bg_img, unsafe_allow_html=True)
 
 set_bg_image("background.jpg")  # 🔧 Place your background.jpg in the same directory
