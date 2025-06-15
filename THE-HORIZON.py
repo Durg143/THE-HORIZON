@@ -1,10 +1,30 @@
+# streamlit_app.py
 import streamlit as st
 from pymongo import MongoClient
 import bcrypt
 from datetime import datetime
-import PyPDF2
+from PIL import Image
+import base64
 
-# ---------------------- 🌐 MongoDB Setup ----------------------
+# ---------------------- 🌄 Background and Logo ----------------------
+
+def set_bg_image(image_path):
+    with open(image_path, "rb") as image_file:
+        encoded_string = base64.b64encode(image_file.read()).decode()
+    page_bg_img = f"""
+    <style>
+    .stApp {{
+        background-image: url("data:image/jpg;base64,{encoded_string}");
+        background-size: cover;
+    }}
+    </style>
+    """
+    st.markdown(page_bg_img, unsafe_allow_html=True)
+
+set_bg_image("background.jpg")  # 🔧 Place your background.jpg in the same directory
+st.image("logo.png", width=200)  # 🔧 Place your logo.png in the same directory
+
+# ---------------------- 🔐 MongoDB Connection ----------------------
 MONGO_URL = st.secrets["mongo"]["url"]
 client = MongoClient(MONGO_URL)
 db = client["book_platform"]
@@ -13,80 +33,84 @@ chapters_col = db["chapters"]
 reviews_col = db["reviews"]
 likes_col = db["likes"]
 
-# ---------------------- 🔑 Auth Helpers ----------------------
+# ---------------------- 🔑 Authentication ----------------------
 def hash_password(password):
     return bcrypt.hashpw(password.encode(), bcrypt.gensalt())
 
 def check_password(password, hashed):
     return bcrypt.checkpw(password.encode(), hashed)
 
-# ---------------------- 🌐 Session Init ----------------------
+# ---------------------- 📌 Session State ----------------------
 if "email" not in st.session_state:
     st.session_state.email = None
 
-# ---------------------- 🧾 App Title ----------------------
-st.set_page_config(page_title="Book Platform", page_icon="📚", layout="centered")
-st.title("📚 Book Publishing Platform")
+# ---------------------- 🔐 Login / Sign Up ----------------------
+st.title("📚 THE HORIZON - Book Publishing Platform")
 
-# ---------------------- 🔐 Login & Signup ----------------------
 if not st.session_state.email:
-    tabs = st.tabs(["🔑 Login", "📝 Sign Up"])
+    auth_tab = st.tabs(["🔑 Login", "📝 Sign Up"])
 
-    with tabs[0]:
+    with auth_tab[0]:
         email = st.text_input("Email", key="login_email")
         password = st.text_input("Password", type="password", key="login_pass")
         if st.button("Login"):
             user = users_col.find_one({"email": email})
             if user and check_password(password, user["password"]):
                 st.session_state.email = email
+                users_col.update_one({"email": email}, {"$set": {"last_login": datetime.utcnow()}})
                 st.success("Welcome back!")
                 st.rerun()
             else:
                 st.error("Invalid credentials")
 
-    with tabs[1]:
-        email = st.text_input("Email", key="signup_email")
-        password = st.text_input("Password", type="password", key="signup_pass")
+    with auth_tab[1]:
+        name = st.text_input("Full Name")
+        mobile = st.text_input("Mobile Number")
+        email = st.text_input("Email")
+        password = st.text_input("Password", type="password")
         if st.button("Sign Up"):
             if users_col.find_one({"email": email}):
                 st.warning("Email already registered.")
             else:
                 hashed = hash_password(password)
-                users_col.insert_one({"email": email, "password": hashed})
+                users_col.insert_one({
+                    "name": name,
+                    "mobile": mobile,
+                    "email": email,
+                    "password": hashed,
+                    "created_at": datetime.utcnow(),
+                    "last_login": datetime.utcnow()
+                })
                 st.success("User registered. Please log in.")
 
-# ---------------------- ✍️ Logged In ----------------------
 else:
     st.success(f"🎉 Logged in as: {st.session_state.email}")
     email = st.session_state.email
+    user = users_col.find_one({"email": email})
     is_admin = email == "pp26012006@gmail.com"
 
+    # ---------------------- ✍️ Upload Chapter (Admin) ----------------------
     if is_admin:
-        with st.expander("📤 Upload Chapter"):
-            uploaded_file = st.file_uploader("Upload chapter (Text or PDF)", type=["txt", "pdf"])
+        st.markdown("## ✍️ Upload New Chapter")
+        with st.form("upload_form"):
             chapter_id = st.text_input("Chapter ID")
             chapter_title = st.text_input("Chapter Title")
-
-            if uploaded_file and chapter_title and chapter_id:
-                content = ""
-                if uploaded_file.type == "application/pdf":
-                    reader = PyPDF2.PdfReader(uploaded_file)
-                    content = "\n".join([page.extract_text() for page in reader.pages])
-                else:
-                    content = uploaded_file.read().decode("utf-8")
-
+            chapter_content = st.text_area("Chapter Content")
+            submitted = st.form_submit_button("Upload Chapter")
+            if submitted:
                 if chapters_col.find_one({"chapter_id": chapter_id}):
                     st.error("Chapter ID already exists.")
                 else:
                     chapters_col.insert_one({
                         "chapter_id": chapter_id,
                         "title": chapter_title,
-                        "content": content,
+                        "content": chapter_content,
                         "uploaded_by": email,
                         "timestamp": datetime.utcnow()
                     })
                     st.success("✅ Chapter uploaded!")
 
+    # ---------------------- 📋 Manage Chapters (Admin) ----------------------
     if is_admin:
         st.markdown("## 📋 Manage Uploaded Chapters")
         all_chapters = list(chapters_col.find())
@@ -107,6 +131,7 @@ else:
                     st.warning("🗑️ Chapter deleted.")
                     st.experimental_rerun()
 
+    # ---------------------- 📖 Read & Review Chapters ----------------------
     st.markdown("## 📖 Read and Review Chapters")
     chapter_titles = [f"{c['chapter_id']} — {c['title']}" for c in chapters_col.find()]
     chapter_map = {f"{c['chapter_id']} — {c['title']}": c for c in chapters_col.find()}
@@ -120,13 +145,13 @@ else:
 
         like_doc = likes_col.find_one({"chapter_id": selected_ch['chapter_id']}) or {"liked_by": []}
         has_liked = email in like_doc["liked_by"]
+
         if not has_liked and st.button("❤️ Like"):
-            likes_col.update_one(
-                {"chapter_id": selected_ch['chapter_id']},
-                {"$addToSet": {"liked_by": email}},
-                upsert=True
-            )
+            likes_col.update_one({"chapter_id": selected_ch['chapter_id']}, {"$addToSet": {"liked_by": email}}, upsert=True)
             st.success("❤️ Liked!")
+
+        if is_admin:
+            st.markdown(f"**Liked by:** {', '.join(like_doc['liked_by'])}")
 
         st.markdown(f"**Total Likes:** {len(like_doc['liked_by']) if like_doc else 0}")
 
@@ -148,11 +173,18 @@ else:
     else:
         st.info("No chapters uploaded yet.")
 
+    # ---------------------- 👁️ Admin: User View ----------------------
+    if is_admin:
+        st.markdown("## 👥 All Registered Users")
+        users = users_col.find()
+        for u in users:
+            st.markdown(f"**{u['name']}** | 📧 {u['email']} | 📱 {u['mobile']} | ⏱️ Last Login: {u.get('last_login', '-')}")
+
     if st.button("Logout"):
         st.session_state.email = None
-        st.rerun()
+        st.experimental_rerun()
 
-# ---------------------- 📌 Footer ----------------------
+# ---------------------------- 📜 Footer & Policy ----------------------------
 with st.expander("Privacy Policy"):
     st.markdown("""
     - We respect your privacy.
@@ -161,23 +193,18 @@ with st.expander("Privacy Policy"):
     - For any queries, contact: **pp26012006@gmail.com**
     """)
 
-st.markdown("---")
-st.markdown("durg143 Book Publishing Platform | All Rights Reserved", unsafe_allow_html=True)
-
 with st.expander("📘 About the Author"):
     st.markdown("""
     Myself Durga Prasad Potnuru, a passionate storyteller and author.
-
-    I believe in the power of words to heal, inspire, and ignite the imagination.  
-    My books often explore emotional resilience, connection, and the horizon between dreams and reality.
-
-    You can follow my journey on [Instagram](https://www.instagram.com/mr_bluff_143/) or [Twitter](https://x.com/durgaprasad069).
-    or [Linkedin](https://www.linkedin.com/in/durga-prasad-potnuru-a60779293/)
+    I believe in the power of words to heal, inspire, and ignite imagination.
+    Connect on [Instagram](https://www.instagram.com/mr_bluff_143/) | [Twitter](https://x.com/durgaprasad069) | [Linkedin](https://www.linkedin.com/in/durga-prasad-potnuru-a60779293/)
     """)
 
 with st.expander("📬 Contact Us"):
     st.markdown("""
-    - 📧 **Email**: pp26012006@gmail.com  
+    - 📧 **Email**: pp26012006@gmail.com
     - 📱 **Instagram**: [@mr_bluff_143](https://www.instagram.com/mr_bluff_143/)
     """)
 
+st.markdown("---")
+st.markdown("<center><b>THE HORIZON</b> Book Publishing Platform | All Rights Reserved</center>", unsafe_allow_html=True)
