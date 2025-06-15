@@ -24,7 +24,7 @@ def set_bg_image(image_path):
     """
     st.markdown(page_bg_img, unsafe_allow_html=True)
 
-set_bg_image("background.jpg")  # 🔧 Place your background.jpg in the same directory
+set_bg_image("background.png")  # 🔧 Place your background.jpg in the same directory
 st.image("logo.png", width=200)  # 🔧 Place your logo.png in the same directory
 
 # ---------------------- 🔐 MongoDB Connection ----------------------
