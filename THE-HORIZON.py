@@ -118,7 +118,7 @@ def show_admin_panel():
 
 # -------------------- Main UI --------------------
 def main():
-    set_bg_image("background.jpg")
+    set_bg_image("background.jpg",width=100)
     st.sidebar.image("dp_logo.png", width=100)
     st.sidebar.title("📚 THE HORIZON")
     if "user" in st.session_state:
