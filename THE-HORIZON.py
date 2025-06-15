@@ -33,7 +33,6 @@ def set_bg_image(image_path):
     }}
     </style>
     """
-    st.markdown(css, unsafe_allow_html=True)
     st.markdown(page_bg_img, unsafe_allow_html=True)
 
 set_bg_image("background.jpg")  # 🔧 Place your background.jpg in the same directory
