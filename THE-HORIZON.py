@@ -1,158 +1,212 @@
+# streamlit_app.py
 import streamlit as st
-import base64
 from pymongo import MongoClient
+import bcrypt
 from datetime import datetime
-import uuid
+from PIL import Image
+import base64
 
-# MongoDB setup
-client = MongoClient("mongodb+srv://pp26012006:durgap%40123@the-horizon.xp1c3zz.mongodb.net/?retryWrites=true&w=majority&appName=THE-HORIZON"
-)
-db = client["the_horizon"]
-users_col = db["users"]
-likes_col = db["likes"]
-logins_col = db["logins"]
+# ---------------------- 🌄 Background and Logo ----------------------
 
-# ---------- UI Enhancements ----------
 def set_bg_image(image_path):
-    with open(image_path, "rb") as img:
-        base64_img = base64.b64encode(img.read()).decode()
-    css = f"""
+    with open(image_path, "rb") as image_file:
+        encoded_string = base64.b64encode(image_file.read()).decode()
+    page_bg_img = f"""
     <style>
     .stApp {{
-        background-image: url("data:image/jpg;base64,{base64_img}");
+        background-image: url("data:image/jpg;base64,{encoded_string}");
         background-size: cover;
-        background-position: center;
-        background-repeat: no-repeat;
-        animation: fadeIn 2s ease-in-out;
-    }}
-
-    @keyframes fadeIn {{
-        0% {{ opacity: 0; transform: translateY(-10px); }}
-        100% {{ opacity: 1; transform: translateY(0); }}
-    }}
-
-    .title {{
-        font-size: 50px; 
-        font-weight: bold; 
-        text-align: center; 
-        color: white; 
-        animation: fadeIn 2s ease-in-out;
-    }}
-
-    .subtitle {{
-        font-size: 24px; 
-        text-align: center; 
-        color: lightgray;
-        animation: fadeIn 3s ease-in-out;
-    }}
-
-    .content-box {{
-        background-color: rgba(0, 0, 0, 0.5); 
-        padding: 20px; 
-        border-radius: 10px; 
-        margin-top: 20px;
-        animation: fadeIn 2s ease-in-out;
-    }}
-
-    button[kind="primary"] {{
-        transition: all 0.3s ease-in-out;
-    }}
-
-    button[kind="primary"]:hover {{
-        transform: scale(1.05);
-        background-color: #ff4b4b !important;
-        color: white !important;
     }}
     </style>
     """
-    st.markdown(css, unsafe_allow_html=True)
+    st.markdown(page_bg_img, unsafe_allow_html=True)
 
-# Set background
-set_bg_image("background.jpg")
+set_bg_image("background.jpg",width=100)  # 🔧 Place your background.jpg in the same directory
+st.image("logo.png", width=200)  # 🔧 Place your logo.png in the same directory
 
-# Title
-st.markdown('<div class="title">THE HORIZON</div>', unsafe_allow_html=True)
-st.markdown('<div class="subtitle">A Small Story</div>', unsafe_allow_html=True)
+# ---------------------- 🔐 MongoDB Connection ----------------------
+MONGO_URL = st.secrets["mongo"]["url"]
+client = MongoClient(MONGO_URL)
+db = client["book_platform"]
+users_col = db["users"]
+chapters_col = db["chapters"]
+reviews_col = db["reviews"]
+likes_col = db["likes"]
 
-# Sidebar Login/Signup
-st.sidebar.header("Login / Signup")
-menu = st.sidebar.selectbox("Choose an option", ["Signup", "Login", "Admin Panel"])
+# ---------------------- 🔑 Authentication ----------------------
+def hash_password(password):
+    return bcrypt.hashpw(password.encode(), bcrypt.gensalt())
 
-# ---------- Signup ----------
-if menu == "Signup":
-    name = st.sidebar.text_input("Full Name")
-    email = st.sidebar.text_input("Email")
-    mobile = st.sidebar.text_input("Mobile Number")
-    password = st.sidebar.text_input("Password", type="password")
+def check_password(password, hashed):
+    return bcrypt.checkpw(password.encode(), hashed)
 
-    if st.sidebar.button("Create Account"):
-        if users_col.find_one({"email": email}):
-            st.sidebar.error("Email already exists.")
-        else:
-            users_col.insert_one({
-                "_id": str(uuid.uuid4()),
-                "name": name,
-                "email": email,
-                "mobile": mobile,
-                "password": password
-            })
-            st.sidebar.success("Account created successfully!")
+# ---------------------- 📌 Session State ----------------------
+if "email" not in st.session_state:
+    st.session_state.email = None
 
-# ---------- Login ----------
-elif menu == "Login":
-    email = st.sidebar.text_input("Email")
-    password = st.sidebar.text_input("Password", type="password")
+# ---------------------- 🔐 Login / Sign Up ----------------------
+st.title("📚 THE HORIZON - Book Publishing Platform")
 
-    if st.sidebar.button("Login"):
-        user = users_col.find_one({"email": email, "password": password})
-        if user:
-            st.session_state.user = user
-            st.success(f"Welcome {user['name']}!")
+if not st.session_state.email:
+    auth_tab = st.tabs(["🔑 Login", "📝 Sign Up"])
 
-            # Track login
-            logins_col.insert_one({
-                "user_id": user["_id"],
-                "email": user["email"],
-                "timestamp": datetime.now()
-            })
+    with auth_tab[0]:
+        email = st.text_input("Email", key="login_email")
+        password = st.text_input("Password", type="password", key="login_pass")
+        if st.button("Login"):
+            user = users_col.find_one({"email": email})
+            if user and check_password(password, user["password"]):
+                st.session_state.email = email
+                users_col.update_one({"email": email}, {"$set": {"last_login": datetime.utcnow()}})
+                st.success("Welcome back!")
+                st.rerun()
+            else:
+                st.error("Invalid credentials")
 
-            # Chapter Content
-            st.markdown('<div class="content-box">', unsafe_allow_html=True)
-            st.header("Chapter 1: The Beginning")
-            st.write("In a world divided by chaos and silence, two souls found a way to echo through the storm...")
-            if st.button("❤️ Like this chapter"):
-                if not likes_col.find_one({"user_id": user["_id"], "chapter": "chapter1"}):
-                    likes_col.insert_one({
-                        "user_id": user["_id"],
-                        "email": user["email"],
-                        "chapter": "chapter1",
-                        "liked_at": datetime.now()
-                    })
-                    st.success("Thanks for liking!")
+    with auth_tab[1]:
+        name = st.text_input("Full Name")
+        mobile = st.text_input("Mobile Number")
+        email = st.text_input("Email")
+        password = st.text_input("Password", type="password")
+        if st.button("Sign Up"):
+            if users_col.find_one({"email": email}):
+                st.warning("Email already registered.")
+            else:
+                hashed = hash_password(password)
+                users_col.insert_one({
+                    "name": name,
+                    "mobile": mobile,
+                    "email": email,
+                    "password": hashed,
+                    "created_at": datetime.utcnow(),
+                    "last_login": datetime.utcnow()
+                })
+                st.success("User registered. Please log in.")
+
+else:
+    st.success(f"🎉 Logged in as: {st.session_state.email}")
+    email = st.session_state.email
+    user = users_col.find_one({"email": email})
+    is_admin = email == "pp26012006@gmail.com"
+
+    # ---------------------- ✍️ Upload Chapter (Admin) ----------------------
+    if is_admin:
+        st.markdown("## ✍️ Upload New Chapter")
+        with st.form("upload_form"):
+            chapter_id = st.text_input("Chapter ID")
+            chapter_title = st.text_input("Chapter Title")
+            chapter_content = st.text_area("Chapter Content")
+            submitted = st.form_submit_button("Upload Chapter")
+            if submitted:
+                if chapters_col.find_one({"chapter_id": chapter_id}):
+                    st.error("Chapter ID already exists.")
                 else:
-                    st.info("You’ve already liked this chapter.")
-            st.markdown('</div>', unsafe_allow_html=True)
-        else:
-            st.sidebar.error("Invalid credentials.")
+                    chapters_col.insert_one({
+                        "chapter_id": chapter_id,
+                        "title": chapter_title,
+                        "content": chapter_content,
+                        "uploaded_by": email,
+                        "timestamp": datetime.utcnow()
+                    })
+                    st.success("✅ Chapter uploaded!")
 
-# ---------- Admin Panel ----------
-elif menu == "Admin Panel":
-    st.markdown('<div class="content-box">', unsafe_allow_html=True)
-    st.subheader("👥 Registered Users")
-    users = list(users_col.find())
-    for u in users:
-        st.markdown(f"- **{u['name']}** ({u['email']}, {u['mobile']})")
+    # ---------------------- 📋 Manage Chapters (Admin) ----------------------
+    if is_admin:
+        st.markdown("## 📋 Manage Uploaded Chapters")
+        all_chapters = list(chapters_col.find())
 
-    st.subheader("📅 Login History")
-    logins = list(logins_col.find().sort("timestamp", -1))
-    for l in logins:
-        st.markdown(f"- {l['email']} at `{l['timestamp']}`")
+        for ch in all_chapters:
+            with st.expander(f"{ch['chapter_id']} — {ch['title']}"):
+                new_title = st.text_input("Edit Title", value=ch['title'], key=f"title_{ch['chapter_id']}")
+                new_content = st.text_area("Edit Content", value=ch['content'], key=f"content_{ch['chapter_id']}")
+                if st.button("✏️ Save Changes", key=f"save_{ch['chapter_id']}"):
+                    chapters_col.update_one({"chapter_id": ch['chapter_id']}, {"$set": {"title": new_title, "content": new_content}})
+                    st.success("✅ Chapter updated.")
+                    st.experimental_rerun()
 
-    st.subheader("👍 Likes on Chapters")
-    likes = list(likes_col.find())
-    for like in likes:
-       st.markdown(
+                if st.button("🗑️ Delete Chapter", key=f"delete_{ch['chapter_id']}"):
+                    chapters_col.delete_one({"chapter_id": ch['chapter_id']})
+                    reviews_col.delete_many({"chapter_id": ch['chapter_id']})
+                    likes_col.delete_many({"chapter_id": ch['chapter_id']})
+                    st.warning("🗑️ Chapter deleted.")
+                    st.experimental_rerun()
+
+    # ---------------------- 📖 Read & Review Chapters ----------------------
+    st.markdown("## 📖 Read and Review Chapters")
+    chapter_titles = [f"{c['chapter_id']} — {c['title']}" for c in chapters_col.find()]
+    chapter_map = {f"{c['chapter_id']} — {c['title']}": c for c in chapters_col.find()}
+
+    if chapter_titles:
+        selected = st.selectbox("Select a Chapter", chapter_titles)
+        selected_ch = chapter_map[selected]
+
+        st.subheader(selected_ch['title'])
+        st.write(selected_ch['content'])
+
+        like_doc = likes_col.find_one({"chapter_id": selected_ch['chapter_id']}) or {"liked_by": []}
+        has_liked = email in like_doc["liked_by"]
+
+        if not has_liked and st.button("❤️ Like"):
+            likes_col.update_one({"chapter_id": selected_ch['chapter_id']}, {"$addToSet": {"liked_by": email}}, upsert=True)
+            st.success("❤️ Liked!")
+
+        if is_admin:
+            st.markdown(f"**Liked by:** {', '.join(like_doc['liked_by'])}")
+
+        st.markdown(f"**Total Likes:** {len(like_doc['liked_by']) if like_doc else 0}")
+
+        st.subheader("💬 Leave a Review")
+        review_text = st.text_area("Your Review")
+        if st.button("Submit Review"):
+            reviews_col.insert_one({
+                "chapter_id": selected_ch['chapter_id'],
+                "email": email,
+                "text": review_text,
+                "timestamp": datetime.utcnow()
+            })
+            st.success("✅ Review submitted!")
+
+        st.subheader("📝 Reader Reviews")
+        all_reviews = reviews_col.find({"chapter_id": selected_ch['chapter_id']}).sort("timestamp", -1)
+        for r in all_reviews:
+            st.markdown(f"**{r['email']}**: {r['text']}")
+    else:
+        st.info("No chapters uploaded yet.")
+
+    # ---------------------- 👁️ Admin: User View ----------------------
+    if is_admin:
+        st.markdown("## 👥 All Registered Users")
+        users = users_col.find()
+        for u in users:
+           st.markdown(
     f"**{u.get('name', 'N/A')}** | 📧 {u.get('email', 'N/A')} | 📱 {u.get('mobile', 'N/A')} | ⏱️ Last Login: {u.get('last_login', 'N/A')}"
 )
 
-    st.markdown('</div>', unsafe_allow_html=True)
+    if st.button("Logout"):
+        st.session_state.email = None
+        st.rerun()
+
+# ---------------------------- 📜 Footer & Policy ----------------------------
+with st.expander("Privacy Policy"):
+    st.markdown("""
+    - We respect your privacy.
+    - Your data is securely stored in our cloud database.
+    - We do not sell or misuse your information.
+    - For any queries, contact: **pp26012006@gmail.com**
+    """)
+
+with st.expander("📘 About the Author"):
+    st.markdown("""
+    Myself Durga Prasad Potnuru, a passionate storyteller and author.
+    I believe in the power of words to heal, inspire, and ignite imagination.
+    Connect on [Instagram](https://www.instagram.com/mr_bluff_143/) | [Twitter](https://x.com/durgaprasad069) | [Linkedin](https://www.linkedin.com/in/durga-prasad-potnuru-a60779293/)
+    """)
+
+with st.expander("📬 Contact Us"):
+    st.markdown("""
+    - 📧 **Email**: pp26012006@gmail.com
+    - 📱 **Instagram**: [@mr_bluff_143](https://www.instagram.com/mr_bluff_143/)
+    """)
+
+st.markdown("---")
+st.markdown("<center><b>THE HORIZON</b> Book Publishing Platform | All Rights Reserved</center>", unsafe_allow_html=True)
