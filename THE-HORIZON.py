@@ -5,7 +5,8 @@ from datetime import datetime
 import uuid
 
 # MongoDB setup
-client = MongoClient("your_mongodb_connection_string")
+client = MongoClient("mongodb+srv://pp26012006:durgap%40123@the-horizon.xp1c3zz.mongodb.net/?retryWrites=true&w=majority&appName=THE-HORIZON"
+)
 db = client["the_horizon"]
 users_col = db["users"]
 likes_col = db["likes"]
