@@ -19,16 +19,7 @@ def set_bg_image(image_path):
         background-repeat: no-repeat;
         background-position: center;
        }}
-     .block-container {{
-        background-color: rgba(0, 0, 0, 0.6);
-        padding: 2rem;
-        border-radius: 10px;
-        animation: fadein 2s ease-in;
-    }}
-    @keyframes fadein {{
-        from {{ opacity: 0; transform: translateY(20px); }}
-        to {{ opacity: 1; transform: translateY(0); }}
-    }}
+     
     </style>
     """
     st.markdown(page_bg_img, unsafe_allow_html=True)
