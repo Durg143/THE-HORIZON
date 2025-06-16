@@ -163,7 +163,7 @@ else:
         if st.button("Submit Review"):
             reviews_col.insert_one({
                 "chapter_id": selected_ch['chapter_id'],
-                "name": name,
+                "email": email,
                 "text": review_text,
                 "timestamp": datetime.utcnow()
             })
@@ -172,7 +172,7 @@ else:
         st.subheader("📝 Reader Reviews")
         all_reviews = reviews_col.find({"chapter_id": selected_ch['chapter_id']}).sort("timestamp", -1)
         for r in all_reviews:
-            st.markdown(f"**{r['name']}**: {r['text']}")
+            st.markdown(f"**{r['email']}**: {r['text']}")
     else:
         st.info("No chapters uploaded yet.")
 
