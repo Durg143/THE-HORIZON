@@ -172,7 +172,7 @@ else:
         st.subheader("📝 Reader Reviews")
         all_reviews = reviews_col.find({"chapter_id": selected_ch['chapter_id']}).sort("timestamp", -1)
         for r in all_reviews:
-            st.markdown(f"**{r['email']}**: {r['text']}")
+            st.markdown(f"**{r['name']}**: {r['text']}")
     else:
         st.info("No chapters uploaded yet.")
 
