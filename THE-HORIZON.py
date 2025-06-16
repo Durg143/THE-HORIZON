@@ -163,7 +163,7 @@ else:
         if st.button("Submit Review"):
             reviews_col.insert_one({
                 "chapter_id": selected_ch['chapter_id'],
-                "email": email,
+                "name": name,
                 "text": review_text,
                 "timestamp": datetime.utcnow()
             })
